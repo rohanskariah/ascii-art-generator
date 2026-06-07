@@ -97,7 +97,23 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type');
+      let data: any;
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const textResponse = await response.text();
+        const snippet = textResponse.length > 80 ? textResponse.substring(0, 80) + '...' : textResponse;
+        
+        let errorMessage = 'The API returned an unexpected non-JSON response.';
+        if (textResponse.includes('The page could not be found') || response.status === 404 || textResponse.includes('<!DOCTYPE html>')) {
+          errorMessage = "Deployment configuration notice: When running on static hosting like Vercel, the '/api/ascii' serverless routing requires backend configuration. Please ensure you have added the GEMINI_API_KEY environment variable in your Vercel Dashboard (under Settings -> Environment Variables) and re-deployed your app so that the serverless functions are active.";
+        } else {
+          errorMessage = `The API returned an invalid response [Status ${response.status}]: ${snippet}`;
+        }
+        throw new Error(errorMessage);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Server returned an error generating ASCII art.');

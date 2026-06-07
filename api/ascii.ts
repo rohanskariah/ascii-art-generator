@@ -1,15 +1,5 @@
-import express from "express";
-import path from "path";
-import dotenv from "dotenv";
-import crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
-import { createServer as createViteServer } from "vite";
-
-dotenv.config({ path: ".env.local" });
-dotenv.config();
-
-const app = express();
-const PORT = 3000;
+import crypto from "crypto";
 
 function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
@@ -27,32 +17,43 @@ function logAsciiEvent(
         .map(([key, value]) => `${key}=${value}`)
         .join(" ")
     : "";
-  console.log(`[ascii] ${timestamp} id=${requestId} ${event}${detailStr ? ` ${detailStr}` : ""}`);
+  console.log(`[ascii-vercel] ${timestamp} id=${requestId} ${event}${detailStr ? ` ${detailStr}` : ""}`);
 }
 
-app.use(express.json());
+export default async function handler(req: any, res: any) {
+  // CORS configuration
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
+  );
 
-// Initialize the newly supported Gemini SDK
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return;
   }
-});
 
-// Health check endpoint
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed. Use POST." });
+  }
 
-// Main endpoint to generate ASCII Art
-app.post("/api/ascii", async (req, res) => {
   const requestId = crypto.randomUUID().slice(0, 8);
   const requestStartedAt = Date.now();
+
+  // Handle bodies parsed both as object or string (depending on middleware/parser)
+  let body = req.body;
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      // Keep it as is
+    }
+  }
+
   try {
-    const { text, style, characterType, customPrompt } = req.body;
+    const { text, style, characterType, customPrompt } = body || {};
 
     logAsciiEvent(requestId, "request_received", {
       text: text?.trim(),
@@ -70,17 +71,26 @@ app.post("/api/ascii", async (req, res) => {
       return res.status(400).json({ error: "Text is required to generate ASCII art." });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
       logAsciiEvent(requestId, "request_rejected", {
         reason: "missing_api_key",
         duration: formatDuration(Date.now() - requestStartedAt),
       });
       return res.status(500).json({ 
-        error: "GEMINI_API_KEY environment variable is not set. Please check the Secrets panel in the AI Studio UI." 
+        error: "GEMINI_API_KEY is not defined in your Vercel Project Settings page. Please go to your Vercel Project Dashboard -> Settings -> Environment Variables, and add GEMINI_API_KEY." 
       });
     }
 
-    // Dynamic prompts indicating fonts and formatting properties
+    const ai = new GoogleGenAI({
+      apiKey: apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build-vercel',
+        }
+      }
+    });
+
     const prompt = `Create a high-quality, professional, beautifully aligned ASCII art representing the text: "${text}".
 
 Style selection requirements:
@@ -127,7 +137,6 @@ CRITICAL GUIDELINES FOR THE GENERATION:
     if (match) {
       cleanedArt = match[1];
     } else {
-      // Inline cleaning fallback
       cleanedArt = rawOutput
         .replace(/^```[a-zA-Z0-9_-]*\n/g, "")
         .replace(/\n```$/g, "")
@@ -135,7 +144,6 @@ CRITICAL GUIDELINES FOR THE GENERATION:
         .replace(/```$/g, "");
     }
 
-    // Strip leading/trailing empty lines if excessive
     cleanedArt = cleanedArt.trimRight();
 
     const lineCount = cleanedArt ? cleanedArt.split("\n").length : 0;
@@ -153,42 +161,19 @@ CRITICAL GUIDELINES FOR THE GENERATION:
       totalDuration: formatDuration(Date.now() - requestStartedAt),
     });
 
-    res.json({
+    return res.status(200).json({
       ascii: cleanedArt,
       success: true
     });
 
   } catch (error: any) {
-    console.error(`[ascii] id=${requestId} Express ASCII endpoint error:`, error);
+    console.error(`[ascii-vercel] id=${requestId} Vercel Serverless ASCII error:`, error);
     logAsciiEvent(requestId, "request_failed", {
       duration: formatDuration(Date.now() - requestStartedAt),
       error: error?.message || "unknown_error",
     });
-    res.status(500).json({ 
-      error: error?.message || "Internal server error occurred when invoking Gemini GenAI." 
+    return res.status(500).json({ 
+      error: error?.message || "Internal server error occurred when invoking Gemini on Vercel." 
     });
   }
-});
-
-// Configure Vite integration
-async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
-
-startServer();
