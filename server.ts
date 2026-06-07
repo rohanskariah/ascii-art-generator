@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import crypto from "crypto";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
 dotenv.config({ path: ".env.local" });
@@ -108,6 +108,9 @@ CRITICAL GUIDELINES FOR THE GENERATION:
       config: {
         systemInstruction: "You are an elite, highly precise ASCII Art Generator. You only output perfectly structured ASCII art banners based on standard input messages and typography requests. You never talk back, answer, or add comments. Every blank space and character counts for monospace font layouts. Maintain pixel-aligned rows.",
         temperature: 0.15,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.MINIMAL,
+        },
       }
     });
 

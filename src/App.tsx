@@ -38,6 +38,7 @@ export default function App() {
   const [themeColor, setThemeColor] = useState<'gold' | 'bronze' | 'rose' | 'silver'>('gold');
   const [fontSize, setFontSize] = useState<'xs' | 'sm' | 'md' | 'lg'>('xs');
   const [wrapText, setWrapText] = useState<boolean>(false);
+  const [centerText, setCenterText] = useState<boolean>(true);
   const [copied, setCopied] = useState<boolean>(false);
 
   // History & Storage
@@ -615,6 +616,22 @@ export default function App() {
                   <span>Wrap:</span>
                   <span className="font-bold">{wrapText ? 'ON' : 'OFF'}</span>
                 </button>
+
+                {/* Centering Alignment Toggle */}
+                <button
+                  type="button"
+                  id="center-toggle"
+                  onClick={() => setCenterText(!centerText)}
+                  className={`px-2.5 py-1 text-[10px] font-mono rounded border flex items-center gap-1 ${
+                    centerText 
+                      ? `${activeTheme.lightBg} ${activeTheme.text} border-${activeTheme.accentText}/20` 
+                      : 'bg-black/40 border-white/5 hover:text-white'
+                  }`}
+                  title="Toggle centering of the ASCII artwork inside the viewer canvas"
+                >
+                  <span>Center:</span>
+                  <span className="font-bold">{centerText ? 'ON' : 'OFF'}</span>
+                </button>
               </div>
 
               {/* Status information details */}
@@ -626,7 +643,9 @@ export default function App() {
             </div>
 
             {/* Monospace Code Display terminal layer */}
-            <div className="flex-1 p-6 sm:p-8 relative overflow-auto bg-[#0a0a0a] min-h-[350px] flex flex-col justify-start">
+            <div className={`flex-1 p-6 sm:p-8 relative overflow-auto bg-[#0a0a0a] min-h-[350px] flex flex-col ${
+              centerText ? 'items-center justify-center' : 'justify-start items-start'
+            }`}>
               {loading && (
                 <div id="terminal-loader" className="absolute inset-0 bg-[#050505]/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-4">
                   <div className={`w-8 h-8 rounded-full border-2 border-t-transparent ${activeTheme.text} animate-spin`}></div>
@@ -642,7 +661,7 @@ export default function App() {
                 id="ascii-art-canvas-pre"
                 className={`font-mono transition-all duration-350 select-text outline-none ${sizeClasses[fontSize]} ${activeTheme.text} ${activeTheme.glowClass} ${
                   wrapText ? 'whitespace-pre-wrap' : 'whitespace-pre'
-                }`}
+                } ${centerText ? `text-left mx-auto ${wrapText ? 'w-full max-w-full' : 'w-max max-w-none'}` : 'text-left'}`}
               >
                 {outputArt}
               </pre>
