@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,600&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Custom Sophisticated glowing styled text */
+.terminal-glow-gold {
+  text-shadow: 0 0 15px rgba(212, 175, 55, 0.45);
+}
+
+.terminal-glow-bronze {
+  text-shadow: 0 0 15px rgba(205, 127, 50, 0.45);
+}
+
+.terminal-glow-rose {
+  text-shadow: 0 0 15px rgba(183, 110, 121, 0.45);
+}
+
+.terminal-glow-silver {
+  text-shadow: 0 0 15px rgba(192, 192, 192, 0.4);
+}
+
+/* Base custom scrollbar for terminal views */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
