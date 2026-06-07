@@ -4,10 +4,30 @@ import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
+dotenv.config({ path: ".env.local" });
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
+}
+
+function logAsciiEvent(
+  requestId: string,
+  event: string,
+  details?: Record<string, string | number | boolean | undefined>
+) {
+  const timestamp = new Date().toISOString();
+  const detailStr = details
+    ? Object.entries(details)
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" ")
+    : "";
+  console.log(`[ascii] ${timestamp} id=${requestId} ${event}${detailStr ? ` ${detailStr}` : ""}`);
+}
 
 app.use(express.json());
 
@@ -28,14 +48,33 @@ app.get("/api/health", (req, res) => {
 
 // Main endpoint to generate ASCII Art
 app.post("/api/ascii", async (req, res) => {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const requestStartedAt = Date.now();
+
   try {
     const { text, style, characterType, customPrompt } = req.body;
 
+    logAsciiEvent(requestId, "request_received", {
+      text: text?.trim(),
+      style: style || "block",
+      characterType: characterType || "simple",
+      hasCustomPrompt: Boolean(customPrompt?.trim()),
+      customPromptLength: customPrompt?.trim().length || 0,
+    });
+
     if (!text || text.trim().length === 0) {
+      logAsciiEvent(requestId, "request_rejected", {
+        reason: "missing_text",
+        duration: formatDuration(Date.now() - requestStartedAt),
+      });
       return res.status(400).json({ error: "Text is required to generate ASCII art." });
     }
 
     if (!process.env.GEMINI_API_KEY) {
+      logAsciiEvent(requestId, "request_rejected", {
+        reason: "missing_api_key",
+        duration: formatDuration(Date.now() - requestStartedAt),
+      });
       return res.status(500).json({ 
         error: "GEMINI_API_KEY environment variable is not set. Please check the Secrets panel in the AI Studio UI." 
       });
@@ -56,16 +95,29 @@ CRITICAL GUIDELINES FOR THE GENERATION:
 3. If the user input is very long, make sure the generated letters are scaled down horizontally so that the text does not wrap awkwardly on standard screens (maximum 80 characters of wrapping).
 4. Put the generated ASCII art inside standard markdown block syntax with "\`\`\`" or "\`\`\`text" to ensure response delivery structure. Do not output anything else.`;
 
+    const model = "gemini-3.5-flash";
+    logAsciiEvent(requestId, "gemini_call_started", {
+      model,
+      promptLength: prompt.length,
+    });
+
+    const geminiStartedAt = Date.now();
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model,
       contents: prompt,
       config: {
         systemInstruction: "You are an elite, highly precise ASCII Art Generator. You only output perfectly structured ASCII art banners based on standard input messages and typography requests. You never talk back, answer, or add comments. Every blank space and character counts for monospace font layouts. Maintain pixel-aligned rows.",
         temperature: 0.15,
       }
     });
+    const geminiDurationMs = Date.now() - geminiStartedAt;
 
     let rawOutput = response.text || "";
+    logAsciiEvent(requestId, "gemini_call_completed", {
+      model,
+      duration: formatDuration(geminiDurationMs),
+      rawOutputLength: rawOutput.length,
+    });
 
     // Parse and extract the actual ASCII art from possible markdown code boundaries
     let cleanedArt = rawOutput;
@@ -85,13 +137,32 @@ CRITICAL GUIDELINES FOR THE GENERATION:
     // Strip leading/trailing empty lines if excessive
     cleanedArt = cleanedArt.trimRight();
 
+    const lineCount = cleanedArt ? cleanedArt.split("\n").length : 0;
+    const maxLineWidth = cleanedArt
+      ? Math.max(...cleanedArt.split("\n").map((line) => line.length))
+      : 0;
+
+    logAsciiEvent(requestId, "response_sent", {
+      status: 200,
+      cleanedOutputLength: cleanedArt.length,
+      lineCount,
+      maxLineWidth,
+      usedMarkdownFence: Boolean(match),
+      geminiDuration: formatDuration(geminiDurationMs),
+      totalDuration: formatDuration(Date.now() - requestStartedAt),
+    });
+
     res.json({
       ascii: cleanedArt,
       success: true
     });
 
   } catch (error: any) {
-    console.error("Express ASCII endpoint error:", error);
+    logAsciiEvent(requestId, "request_failed", {
+      duration: formatDuration(Date.now() - requestStartedAt),
+      error: error?.message || "unknown_error",
+    });
+    console.error(`[ascii] id=${requestId} Express ASCII endpoint error:`, error);
     res.status(500).json({ 
       error: error?.message || "Internal server error occurred when invoking Gemini GenAI." 
     });
