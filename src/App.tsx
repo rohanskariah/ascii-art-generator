@@ -1,26 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Sparkles, 
-  Terminal, 
-  Copy, 
-  Check, 
-  Download, 
-  RotateCcw, 
-  Code, 
-  Heart, 
-  Trash2, 
-  Search, 
-  Sliders, 
-  HelpCircle, 
-  Cpu, 
-  Clock, 
-  Shuffle, 
-  Share2,
+import {
+  Sparkles,
+  Terminal,
+  Download,
+  Heart,
+  Trash2,
+  Search,
+  Sliders,
+  Cpu,
+  Clock,
+  Shuffle,
   FileDown
 } from 'lucide-react';
 import { AsciiStyle, CharacterType, AsciiArtItem } from './types';
 import { STYLE_OPTIONS, CHARACTER_OPTIONS, PRESET_PHRASES, INITIAL_WELCOME_ART } from './data';
+import { apiService, GenerateRequest } from './services/apiService';
+import { downloadPNG } from './services/pngService';
 
 export default function App() {
   // Input controls
@@ -36,6 +32,7 @@ export default function App() {
   
   // Customization HUD
   const [themeColor, setThemeColor] = useState<'gold' | 'bronze' | 'rose' | 'silver'>('gold');
+  const [customColor, setCustomColor] = useState<string>('#D4AF37');
   const [fontSize, setFontSize] = useState<'xs' | 'sm' | 'md' | 'lg'>('xs');
   const [wrapText, setWrapText] = useState<boolean>(false);
   const [centerText, setCenterText] = useState<boolean>(true);
@@ -64,6 +61,12 @@ export default function App() {
       }
     }
 
+    // Load custom color preference
+    const savedColor = localStorage.getItem('custom_color');
+    if (savedColor) {
+      setCustomColor(savedColor);
+    }
+
     return () => clearInterval(timer);
   }, []);
 
@@ -85,39 +88,17 @@ export default function App() {
     setErrorMessage('');
 
     try {
-      const response = await fetch('/api/ascii', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: inputText.trim(),
-          style: selectedStyle,
-          characterType: selectedCharType,
-          customPrompt: customPrompt.trim()
-        }),
-      });
+      const request: GenerateRequest = {
+        text: inputText.trim(),
+        style: selectedStyle,
+        characterType: selectedCharType,
+        customPrompt: customPrompt.trim()
+      };
 
-      const contentType = response.headers.get('content-type');
-      let data: any;
+      const data = await apiService.generateAscii(request);
 
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const textResponse = await response.text();
-        const snippet = textResponse.length > 80 ? textResponse.substring(0, 80) + '...' : textResponse;
-        
-        let errorMessage = 'The API returned an unexpected non-JSON response.';
-        if (textResponse.includes('The page could not be found') || response.status === 404 || textResponse.includes('<!DOCTYPE html>')) {
-          errorMessage = "Deployment configuration notice: When running on static hosting like Vercel, the '/api/ascii' serverless routing requires backend configuration. Please ensure you have added the GEMINI_API_KEY environment variable in your Vercel Dashboard (under Settings -> Environment Variables) and re-deployed your app so that the serverless functions are active.";
-        } else {
-          errorMessage = `The API returned an invalid response [Status ${response.status}]: ${snippet}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Server returned an error generating ASCII art.');
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate ASCII art');
       }
 
       const generatedArt = data.ascii;
@@ -174,7 +155,9 @@ export default function App() {
     const file = new Blob([outputArt], {type: 'text/plain;charset=utf-8'});
     element.href = URL.createObjectURL(file);
     const sanitizedName = inputText.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'ascii';
-    element.download = `ascii_${sanitizedName}_${selectedStyle}.txt`;
+    const sanitizedPrompt = customPrompt.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
+    const promptPart = sanitizedPrompt ? `_${sanitizedPrompt}` : '';
+    element.download = `ascii_${sanitizedName}_${selectedStyle}_${selectedCharType}${promptPart}.txt`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -262,6 +245,17 @@ export default function App() {
       glowClass: 'terminal-glow-silver',
       iconColor: '#CCCCCC',
     },
+    custom: {
+      text: 'text-[custom]',
+      bgGlow: 'shadow-[custom]/5',
+      border: 'border-[custom]/25 focus-within:border-[custom]',
+      accentBg: 'bg-[custom]',
+      accentText: 'text-[custom]',
+      solidButton: 'bg-[custom] hover:bg-[custom] focus:ring-[custom] text-black font-bold tracking-wide transition-all duration-300 shadow-lg shadow-[custom]/10',
+      lightBg: 'bg-[custom]/10',
+      glowClass: 'terminal-glow-custom',
+      iconColor: 'custom',
+    },
   };
 
   const activeTheme = themeStyles[themeColor];
@@ -282,6 +276,7 @@ export default function App() {
     }
     return matchesSearch;
   });
+
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#E5E5E5] font-sans flex flex-col antialiased">
@@ -310,7 +305,7 @@ export default function App() {
             {/* HUD theme chooser */}
             <div className="flex items-center gap-1.5 bg-zinc-900/60 p-1.5 rounded-lg border border-zinc-800">
               <span className="text-[10px] uppercase font-mono text-zinc-500 mr-1 pl-1">PALETTE:</span>
-              {(['gold', 'bronze', 'rose', 'silver'] as const).map(color => (
+              {(['gold', 'bronze', 'rose', 'silver', 'custom'] as const).map(color => (
                 <button
                   key={color}
                   id={`hud-theme-${color}`}
@@ -319,11 +314,25 @@ export default function App() {
                     color === 'gold' ? 'bg-[#D4AF37] border-zinc-950 hover:scale-110' :
                     color === 'bronze' ? 'bg-[#CD7F32] border-zinc-950 hover:scale-110' :
                     color === 'rose' ? 'bg-[#B76E79] border-zinc-950 hover:scale-110' :
-                    'bg-[#CCCCCC] border-zinc-950 hover:scale-110'
+                    color === 'silver' ? 'bg-[#CCCCCC] border-zinc-950 hover:scale-110' :
+                    'border-zinc-950 hover:scale-110'
                   } ${themeColor === color ? 'ring-2 ring-white scale-110' : 'opacity-65'}`}
+                  style={color === 'custom' ? { backgroundColor: customColor } : undefined}
                   title={`${color} mode`}
                 />
               ))}
+              {themeColor === 'custom' && (
+                <input
+                  type="color"
+                  value={customColor}
+                  onChange={(e) => {
+                    setCustomColor(e.target.value);
+                    localStorage.setItem('custom_color', e.target.value);
+                  }}
+                  className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent ml-1"
+                  title="Pick custom color"
+                />
+              )}
             </div>
 
             {/* Time stamp telemetry */}
@@ -399,8 +408,8 @@ export default function App() {
                       id={`preset-btn-${phrase.replace(/\s+/g, '-')}`}
                       onClick={() => handlePresetClick(phrase)}
                       className={`text-[10px] font-mono px-2.5 py-1 rounded transition border ${
-                        inputText.toUpperCase() === phrase 
-                          ? `${activeTheme.lightBg} ${activeTheme.text} border-${activeTheme.accentText}/40` 
+                        inputText.toUpperCase() === phrase
+                          ? `${activeTheme.lightBg} ${activeTheme.text} border-${activeTheme.accentText}/40`
                           : 'bg-black/20 text-[#888888] border-white/5 hover:bg-white/5 hover:text-[#E5E5E5]'
                       }`}
                     >
@@ -576,6 +585,17 @@ export default function App() {
                 >
                   <Download size={14} />
                 </button>
+
+                <button
+                  type="button"
+                  id="download-png-terminal-btn"
+                  onClick={() => { const n = inputText.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'ascii'; const p = customPrompt.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20); const pp = p ? `_${p}` : ''; downloadPNG(outputArt, `ascii_${n}_${selectedStyle}_${selectedCharType}${pp}.png`, themeColor === 'custom' ? customColor : activeTheme.iconColor); }}
+                  disabled={outputArt === INITIAL_WELCOME_ART}
+                  className="p-2 rounded-full border border-white/10 bg-transparent text-[#888888] hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  title="Download as PNG with color support"
+                >
+                  <FileDown size={14} />
+                </button>
               </div>
             </div>
 
@@ -657,9 +677,11 @@ export default function App() {
               )}
 
               {/* Real character art matrix */}
-              <pre 
+              <pre
                 id="ascii-art-canvas-pre"
-                className={`font-mono transition-all duration-350 select-text outline-none ${sizeClasses[fontSize]} ${activeTheme.text} ${activeTheme.glowClass} ${
+                className={`font-mono transition-all duration-350 select-text outline-none ${sizeClasses[fontSize]} ${
+                  themeColor === 'custom' ? `text-[${customColor}]` : activeTheme.text
+                } ${activeTheme.glowClass} ${
                   wrapText ? 'whitespace-pre-wrap' : 'whitespace-pre'
                 } ${centerText ? `text-left mx-auto ${wrapText ? 'w-full max-w-full' : 'w-max max-w-none'}` : 'text-left'}`}
               >
