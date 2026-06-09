@@ -77,8 +77,8 @@ export default async function handler(req: any, res: any) {
         reason: "missing_api_key",
         duration: formatDuration(Date.now() - requestStartedAt),
       });
-      return res.status(500).json({ 
-        error: "GEMINI_API_KEY is not defined in your Vercel Project Settings page. Please go to your Vercel Project Dashboard -> Settings -> Environment Variables, and add GEMINI_API_KEY." 
+      return res.status(500).json({
+        error: "GEMINI_API_KEY is not defined in your Vercel Project Settings page. Please go to your Vercel Project Dashboard -> Settings -> Environment Variables, and add GEMINI_API_KEY."
       });
     }
 
@@ -175,8 +175,8 @@ CRITICAL GUIDELINES FOR THE GENERATION:
       duration: formatDuration(Date.now() - requestStartedAt),
       error: error?.message || "unknown_error",
     });
-    return res.status(500).json({ 
-      error: error?.message || "Internal server error occurred when invoking Gemini on Vercel." 
+    return res.status(500).json({
+      error: error?.message || "Internal server error occurred when invoking Gemini on Vercel."
     });
   }
 }

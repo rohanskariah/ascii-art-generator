@@ -1,6 +1,0 @@
-{
-  "name": "ASCII Art Generator",
-  "description": "An elegant application that transforms any text input into creative, high-quality ASCII art using the Gemini API.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
