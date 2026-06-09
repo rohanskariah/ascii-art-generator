@@ -43,8 +43,12 @@ export class ApiService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       return await response.json() as GenerateResponse;
